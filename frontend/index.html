@@ -5,16 +5,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Enterprise Infrastructure Control Center</title>
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <!-- Chart.js for real-time trend visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between font-sans"
-    x-data="statusDashboard()" x-init="initCharts()">
+    x-data="statusDashboard()">
 
     <!-- Header -->
     <header class="bg-slate-900 border-b border-slate-800 py-4 px-6 shadow-xl sticky top-0 z-50">
@@ -22,18 +19,20 @@
             <div class="flex items-center space-x-3">
                 <span class="inline-block w-3 h-3 bg-emerald-500 rounded-full animate-ping"></span>
                 <h1 class="text-xl font-black tracking-wider text-slate-100">INFRA<span
-                        class="text-indigo-500">OPS</span> // CONTROL CENTER</h1>
+                        class="text-indigo-500">OPS</span> // COMMAND CENTER</h1>
             </div>
             <div class="flex items-center space-x-4 text-sm text-slate-400">
-                <span class="px-3 py-1 bg-slate-800 rounded-full border border-slate-700 font-mono text-xs">Environment:
-                    Production</span>
+                <button @click="triggerAudit()"
+                    class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition shadow-md">
+                    Run Diagnostics
+                </button>
                 <span>Synced: <span x-text="lastUpdated" class="text-emerald-400 font-mono font-bold"></span></span>
             </div>
         </div>
     </header>
 
     <!-- Main Content -->
-    <main class="max-w-7xl mx-auto px-6 py-8 w-full flex-grow space-y-8">
+    <main class="max-w-7xl mx-auto px-6 py-8 w-full flex-grow space-y-6">
 
         <!-- Status Banner -->
         <div class="p-5 rounded-2xl border flex items-center justify-between shadow-lg backdrop-blur-md"
@@ -44,37 +43,28 @@
                         viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                     </svg>
-                    <svg x-show="!allOperational" class="w-6 h-6 text-amber-400" fill="none" stroke="currentColor"
-                        viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
-                        </path>
-                    </svg>
                 </div>
                 <div>
                     <h2 class="font-bold text-lg"
-                        x-text="allOperational ? 'Cluster Health: Optimal' : 'Cluster Warning: Degraded Nodes'"></h2>
-                    <p class="text-xs text-slate-400">Active automated health checks running via SQLite persistence
-                        engine.</p>
+                        x-text="allOperational ? 'Cluster Health: Optimal & Fully Operational' : 'Cluster Warning: Degraded Nodes Detected'">
+                    </h2>
+                    <p class="text-xs text-slate-400">Automated OS telemetry active with SQLite persistent ring buffer.
+                    </p>
                 </div>
             </div>
-            <div class="flex space-x-3">
-                <span class="text-xs px-3.5 py-1.5 bg-slate-900 rounded-xl border border-slate-800 font-mono"
-                    x-text="totalServers + ' Nodes Monitored'"></span>
-            </div>
+            <span class="text-xs px-3.5 py-1.5 bg-slate-900 rounded-xl border border-slate-800 font-mono"
+                x-text="totalServers + ' Active Nodes'"></span>
         </div>
 
         <!-- Server Grid -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <template x-for="server in servers" :key="server.id">
                 <div
-                    class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col justify-between backdrop-blur-sm">
+                    class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col justify-between">
                     <div>
                         <div class="flex justify-between items-start mb-4">
                             <div>
-                                <h3 class="font-bold text-lg text-slate-100 flex items-center gap-2">
-                                    <span x-text="server.name"></span>
-                                </h3>
+                                <h3 class="font-bold text-lg text-slate-100" x-text="server.name"></h3>
                                 <span class="text-xs text-slate-500 font-mono" x-text="'ID: ' + server.id"></span>
                             </div>
                             <span
@@ -85,7 +75,7 @@
                         </div>
 
                         <!-- Current Telemetry Gauges -->
-                        <div class="grid grid-cols-2 gap-4 my-6">
+                        <div class="grid grid-cols-2 gap-4 my-4">
                             <div class="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
                                 <span class="text-xs text-slate-400 block mb-1">CPU Load</span>
                                 <span class="text-xl font-mono font-bold text-indigo-400"
@@ -98,13 +88,18 @@
                             </div>
                         </div>
 
-                        <!-- Sparkline Chart Container for Local Node -->
-                        <div class="mt-4 p-3 bg-slate-950/40 rounded-xl border border-slate-800/50"
+                        <!-- Chart Component for Local Node -->
+                        <div class="mt-4 p-3 bg-slate-950/50 rounded-xl border border-slate-800"
                             x-show="server.id === 'srv-local'">
-                            <div class="text-xs text-slate-400 mb-2 font-medium">Live CPU History Trend (SQLite Logged)
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="text-xs text-slate-400 font-medium">CPU History Trend (SQLite
+                                    Persisted)</span>
+                                <span
+                                    class="text-[10px] bg-indigo-950 text-indigo-300 px-2 py-0.5 rounded font-mono">Live
+                                    Stream</span>
                             </div>
-                            <div class="h-28 relative">
-                                <canvas :id="'chart-' + server.id"></canvas>
+                            <div style="height: 120px; position: relative; width: 100%;">
+                                <canvas id="cpuChart"></canvas>
                             </div>
                         </div>
                     </div>
@@ -137,9 +132,6 @@
                         <span class="text-slate-500" x-text="new Date(incident.timestamp).toLocaleTimeString()"></span>
                     </div>
                 </template>
-                <div x-show="incidents.length === 0" class="p-4 text-slate-500 text-center italic">
-                    No active warnings or anomalies recorded. Cluster running smoothly.
-                </div>
             </div>
         </div>
 
@@ -147,12 +139,12 @@
 
     <!-- Footer -->
     <footer class="bg-slate-900 border-t border-slate-800 py-4 px-6 text-center text-xs text-slate-500 font-mono">
-        <p>InfraOps Enterprise Engine &bull; Persistent SQLite Metrics &bull; Portfolio Grade</p>
+        <p>InfraOps Enterprise Engine &bull; Advanced Telemetry Command Center</p>
     </footer>
 
-    <!-- Frontend Alpine & Chart Logic -->
+    <!-- Script Logic -->
     <script>
-        let cpuChartInstance = null;
+        let chartInstance = null;
 
         function statusDashboard() {
             return {
@@ -163,10 +155,49 @@
                 incidents: [],
 
                 init() {
+                    // Initialize Chart after first tick to guarantee canvas DOM node exists
+                    this.$nextTick(() => {
+                        this.initChart();
+                    });
+
                     this.fetchStatus();
-                    setInterval(() => {
-                        this.fetchStatus();
-                    }, 5000);
+                    setInterval(() => this.fetchStatus(), 5000);
+                },
+
+                initChart() {
+                    const ctx = document.getElementById('cpuChart');
+                    if (ctx && !chartInstance) {
+                        chartInstance = new Chart(ctx, {
+                            type: 'line',
+                            data: {
+                                labels: [],
+                                datasets: [{
+                                    label: 'CPU Usage %',
+                                    data: [],
+                                    borderColor: '#818cf8',
+                                    backgroundColor: 'rgba(129, 140, 248, 0.1)',
+                                    borderWidth: 2,
+                                    fill: true,
+                                    tension: 0.35,
+                                    pointRadius: 2
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: { legend: { display: false } },
+                                scales: {
+                                    x: { display: false },
+                                    y: {
+                                        min: 0,
+                                        max: 100,
+                                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                                        ticks: { color: '#64748b', font: { size: 9 } }
+                                    }
+                                }
+                            }
+                        });
+                    }
                 },
 
                 fetchStatus() {
@@ -179,52 +210,27 @@
                             this.allOperational = this.servers.every(s => s.status === 'online');
                             this.incidents = data.incidents || [];
 
-                            // Update chart data dynamically
                             const localServer = this.servers.find(s => s.id === 'srv-local');
-                            if (localServer && localServer.history && cpuChartInstance) {
-                                cpuChartInstance.data.labels = localServer.history.map(h => new Date(h.timestamp).toLocaleTimeString());
-                                cpuChartInstance.data.datasets[0].data = localServer.history.map(h => h.cpu_usage);
-                                cpuChartInstance.update('none');
+
+                            // Ensure chart is initialized if DOM was delayed
+                            if (!chartInstance) {
+                                this.initChart();
+                            }
+
+                            if (localServer && localServer.history && chartInstance) {
+                                chartInstance.data.labels = localServer.history.map(h => new Date(h.timestamp).toLocaleTimeString());
+                                chartInstance.data.datasets[0].data = localServer.history.map(h => h.cpu_usage);
+                                chartInstance.update();
                             }
                         })
-                        .catch(err => console.error('Error fetching dashboard telemetry:', err));
-                }
-            }
-        }
+                        .catch(err => console.error('Fetch error:', err));
+                },
 
-        function initCharts() {
-            const ctx = document.getElementById('chart-srv-local');
-            if (ctx) {
-                cpuChartInstance = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: [],
-                        datasets: [{
-                            label: 'CPU %',
-                            data: [],
-                            borderColor: '#6366f1',
-                            backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                            borderWidth: 2,
-                            fill: true,
-                            tension: 0.3,
-                            pointRadius: 2
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
-                        scales: {
-                            x: { display: false },
-                            y: {
-                                min: 0,
-                                max: 100,
-                                grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                                ticks: { color: '#64748b', font: { size: 10 } }
-                            }
-                        }
-                    }
-                });
+                triggerAudit() {
+                    fetch('http://localhost:5000/api/audit', { method: 'POST' })
+                        .then(res => res.json())
+                        .then(() => this.fetchStatus());
+                }
             }
         }
     </script>
