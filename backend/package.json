@@ -14,6 +14,10 @@
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "ping": "^1.0.0",
+    "sqlite3": "^6.0.1",
     "systeminformation": "^5.33.1"
+  },
+  "allowScripts": {
+    "sqlite3@6.0.1": true
   }
 }
