@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud-Native Infrastructure Status</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Alpine.js for reactivity -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between font-sans"
+    x-data="statusDashboard()">
+
+    <!-- Header -->
+    <header class="bg-slate-800 border-b border-slate-700 py-4 px-6 shadow-md">
+        <div class="max-w-6xl mx-auto flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <span class="inline-block w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></span>
+                <h1 class="text-xl font-bold tracking-wide">InfraOps // Global Status</h1>
+            </div>
+            <div class="text-sm text-slate-400">
+                Last Updated: <span x-text="lastUpdated" class="text-slate-200"></span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-6xl mx-auto px-6 py-10 w-full flex-grow">
+
+        <!-- Status Banner -->
+        <div class="mb-8 p-4 rounded-xl border flex items-center justify-between"
+            :class="allOperational ? 'bg-emerald-950/40 border-emerald-800 text-emerald-300' : 'bg-amber-950/40 border-amber-800 text-amber-300'">
+            <div class="flex items-center space-x-3">
+                <svg x-show="allOperational" class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor"
+                    viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+                <svg x-show="!allOperational" class="w-6 h-6 text-amber-400" fill="none" stroke="currentColor"
+                    viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                    </path>
+                </svg>
+                <span class="font-semibold text-lg"
+                    x-text="allOperational ? 'All Systems Operational' : 'Degraded Performance Detected'"></span>
+            </div>
+            <span class="text-sm px-3 py-1 bg-slate-800/80 rounded-lg border border-slate-700"
+                x-text="totalServers + ' Monitored Nodes'"></span>
+        </div>
+
+        <!-- Server Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <template x-for="server in servers" :key="server.id">
+                <div
+                    class="bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-lg flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <h3 class="font-bold text-lg text-slate-100" x-text="server.name"></h3>
+                                <span class="text-xs text-slate-400 font-mono" x-text="server.id"></span>
+                            </div>
+                            <span class="px-2.5 py-1 rounded-full text-xs font-medium uppercase tracking-wider"
+                                :class="server.status === 'online' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'"
+                                x-text="server.status">
+                            </span>
+                        </div>
+
+                        <!-- Metrics -->
+                        <div class="space-y-3 mt-6">
+                            <div>
+                                <div class="flex justify-between text-sm mb-1">
+                                    <span class="text-slate-400">CPU Usage</span>
+                                    <span class="font-mono font-medium" x-text="server.cpuUsage"></span>
+                                </div>
+                                <div class="w-full bg-slate-700 h-2 rounded-full overflow-hidden">
+                                    <div class="bg-indigo-500 h-full rounded-full transition-all duration-500"
+                                        :style="'width: ' + server.cpuUsage"></div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between text-sm mb-1">
+                                    <span class="text-slate-400">Memory Usage</span>
+                                    <span class="font-mono font-medium" x-text="server.memoryUsage"></span>
+                                </div>
+                                <div class="w-full bg-slate-700 h-2 rounded-full overflow-hidden">
+                                    <div class="bg-sky-500 h-full rounded-full transition-all duration-500"
+                                        :style="'width: ' + server.memoryUsage"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Footer Info -->
+                    <div class="mt-6 pt-4 border-t border-slate-700/60 flex justify-between text-xs text-slate-400">
+                        <div>Uptime: <span class="text-slate-200 font-medium" x-text="server.uptime"></span></div>
+                        <div>Latency: <span class="text-slate-200 font-medium" x-text="server.latency"></span></div>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-800 border-t border-slate-700 py-4 px-6 text-center text-sm text-slate-400">
+        <p>InfraOps Status Engine &bull; Built for Portfolio Demonstration</p>
+    </footer>
+
+    <!-- Frontend Script Logic -->
+    <script>
+        function statusDashboard() {
+            return {
+                servers: [],
+                totalServers: 0,
+                lastUpdated: 'Loading...',
+                allOperational: true,
+
+                init() {
+                    this.fetchStatus();
+                    // Poll the backend every 5 seconds for live updates
+                    setInterval(() => {
+                        this.fetchStatus();
+                    }, 5000);
+                },
+
+                fetchStatus() {
+                    // Points to your local backend server
+                    fetch('http://localhost:5000/api/status')
+                        .then(res => res.json())
+                        .then(data => {
+                            this.servers = data.servers;
+                            this.totalServers = data.totalServers;
+                            this.lastUpdated = new Date(data.timestamp).toLocaleTimeString();
+                            this.allOperational = this.servers.every(s => s.status === 'online');
+                        })
+                        .catch(err => {
+                            console.error('Failed to fetch infrastructure metrics:', err);
+                        });
+                }
+            }
+        }
+    </script>
+</body>
+
+</html>
