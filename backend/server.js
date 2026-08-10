@@ -12,7 +12,6 @@ app.use(express.json());
 
 const db = new sqlite3.Database('./metrics.db', (err) => {
     if (err) console.error('Database opening error: ', err.message);
-    else console.log('Connected to SQLite persistent metrics database.');
 });
 
 db.serialize(() => {
@@ -31,25 +30,22 @@ db.serialize(() => {
         event_type TEXT,
         message TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS monitored_nodes (
+        id TEXT PRIMARY KEY,
+        name TEXT,
+        host TEXT
     )`, () => {
-        // Seed initial history if empty so charts display immediately
-        db.get(`SELECT COUNT(*) as count FROM metrics_history`, (err, row) => {
+        db.get(`SELECT COUNT(*) as count FROM monitored_nodes`, (err, row) => {
             if (row && row.count === 0) {
-                const now = Date.now();
-                for (let i = 10; i >= 0; i--) {
-                    db.run(`INSERT INTO metrics_history (server_id, cpu_usage, memory_usage, latency, timestamp) VALUES (?, ?, ?, ?, ?)`,
-                        ['srv-local', 20 + Math.random() * 15, 85 + Math.random() * 5, 45 + Math.floor(Math.random() * 20), new Date(now - i * 30000).toISOString()]
-                    );
-                }
-                db.run(`INSERT INTO incident_logs (server_id, event_type, message) VALUES (?, ?, ?)`,
-                    ['cluster', 'INFO', 'Control Center initialized successfully. SQLite telemetry active.']
-                );
+                db.run(`INSERT INTO monitored_nodes (id, name, host) VALUES (?, ?, ?)`, ['srv-gateway-cf', 'Cloudflare Edge DNS', '1.1.1.1']);
             }
         });
     });
 });
 
-// Background job: Collect metrics every 30 seconds
+// Background job: Telemetry collection & threshold monitoring
 setInterval(async () => {
     try {
         const load = await si.currentLoad();
@@ -63,8 +59,14 @@ setInterval(async () => {
         db.run(`INSERT INTO metrics_history (server_id, cpu_usage, memory_usage, latency) VALUES (?, ?, ?, ?)`,
             ['srv-local', cpuVal, memVal, latencyVal]
         );
+
+        if (cpuVal > 85) {
+            db.run(`INSERT INTO incident_logs (server_id, event_type, message) VALUES (?, ?, ?)`,
+                ['srv-local', 'WARNING', `High CPU Load detected: ${cpuVal}%`]
+            );
+        }
     } catch (e) {
-        console.error('Background collection error:', e);
+        console.error('Background job error:', e);
     }
 }, 30000);
 
@@ -79,39 +81,45 @@ app.get('/api/status', async (req, res) => {
         const uptimeDays = (time.uptime / 86400).toFixed(1) + ' days';
 
         const googlePing = await ping.promise.probe('8.8.8.8', { timeout: 2 });
-        const cloudflarePing = await ping.promise.probe('1.1.1.1', { timeout: 2 });
 
-        db.all(`SELECT cpu_usage, memory_usage, timestamp FROM metrics_history WHERE server_id = 'srv-local' ORDER BY id DESC LIMIT 15`, [], (err, historyRows) => {
-            db.all(`SELECT * FROM incident_logs ORDER BY id DESC LIMIT 5`, [], (err, incidentRows) => {
-                
-                const realServers = [
-                    {
-                        id: 'srv-local',
-                        name: 'Local Host Node (OS Telemetry)',
-                        status: 'online',
-                        cpuUsage: localCpuUsage,
-                        memoryUsage: localMemUsage,
-                        uptime: uptimeDays,
-                        latency: googlePing.alive ? googlePing.time + 'ms' : 'Timeout',
-                        history: historyRows ? historyRows.reverse() : []
-                    },
-                    {
-                        id: 'srv-gateway-cf',
-                        name: 'Cloudflare Edge DNS (1.1.1.1)',
-                        status: cloudflarePing.alive ? 'online' : 'degraded',
-                        cpuUsage: 'N/A',
-                        memoryUsage: 'N/A',
-                        uptime: 'Always On',
-                        latency: cloudflarePing.alive ? cloudflarePing.time + 'ms' : 'Unreachable',
-                        history: []
-                    }
-                ];
+        db.all(`SELECT * FROM monitored_nodes`, [], async (err, customNodes) => {
+            let extraServers = [];
+            for (let node of customNodes) {
+                const p = await ping.promise.probe(node.host, { timeout: 2 });
+                extraServers.push({
+                    id: node.id,
+                    name: node.name,
+                    status: p.alive ? 'online' : 'degraded',
+                    cpuUsage: 'N/A (Remote)',
+                    memoryUsage: 'N/A (Remote)',
+                    uptime: 'Active Ping',
+                    latency: p.alive ? p.time + 'ms' : 'Unreachable',
+                    history: []
+                });
+            }
 
-                res.json({
-                    timestamp: new Date().toISOString(),
-                    totalServers: realServers.length,
-                    servers: realServers,
-                    incidents: incidentRows || []
+            db.all(`SELECT cpu_usage, memory_usage, timestamp FROM metrics_history WHERE server_id = 'srv-local' ORDER BY id DESC LIMIT 15`, [], (err, historyRows) => {
+                db.all(`SELECT * FROM incident_logs ORDER BY id DESC LIMIT 6`, [], (err, incidentRows) => {
+                    const servers = [
+                        {
+                            id: 'srv-local',
+                            name: 'Local Host Node (OS Telemetry)',
+                            status: 'online',
+                            cpuUsage: localCpuUsage,
+                            memoryUsage: localMemUsage,
+                            uptime: uptimeDays,
+                            latency: googlePing.alive ? googlePing.time + 'ms' : 'Timeout',
+                            history: historyRows ? historyRows.reverse() : []
+                        },
+                        ...extraServers
+                    ];
+
+                    res.json({
+                        timestamp: new Date().toISOString(),
+                        totalServers: servers.length,
+                        servers: servers,
+                        incidents: incidentRows || []
+                    });
                 });
             });
         });
@@ -120,14 +128,38 @@ app.get('/api/status', async (req, res) => {
     }
 });
 
-// Endpoint to trigger manual diagnostics audit
+app.post('/api/nodes', (req, res) => {
+    const { name, host } = req.body;
+    if (!name || !host) return res.status(400).json({ error: 'Name and host required' });
+    
+    // Fixed string generation
+    const id = 'srv-' + Math.random().toString(36).substring(2, 7);
+
+    db.run(`INSERT INTO monitored_nodes (id, name, host) VALUES (?, ?, ?)`, [id, name, host], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        db.run(`INSERT INTO incident_logs (server_id, event_type, message) VALUES (?, ?, ?)`,
+            [id, 'INFO', `New monitoring node added: ${name} (${host})`]
+        );
+        res.json({ success: true, id });
+    });
+});
+
+app.get('/api/export', (req, res) => {
+    db.all(`SELECT * FROM metrics_history ORDER BY id DESC`, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', 'attachment; filename=infra-metrics-export.json');
+        res.send(JSON.stringify(rows, null, 2));
+    });
+});
+
 app.post('/api/audit', (req, res) => {
     db.run(`INSERT INTO incident_logs (server_id, event_type, message) VALUES (?, ?, ?)`,
-        ['cluster', 'AUDIT', 'Manual diagnostic probe triggered by operator.'],
-        () => { res.json({ success: true, message: 'Diagnostic audit completed.' }); }
+        ['cluster', 'AUDIT', 'Manual diagnostic probe executed by system operator.'],
+        () => { res.json({ success: true }); }
     );
 });
 
 app.listen(PORT, () => {
-    console.log(`Enterprise backend running on port ${PORT}`);
+    console.log(`Enterprise Advanced Backend running on port ${PORT}`);
 });
