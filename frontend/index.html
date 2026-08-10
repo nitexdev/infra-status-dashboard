@@ -8,6 +8,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="http://localhost:5000/socket.io/socket.io.js"></script>
 </head>
 
 <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between font-sans"
@@ -19,7 +20,7 @@
             <div class="flex items-center space-x-3">
                 <span class="inline-block w-3 h-3 bg-emerald-500 rounded-full animate-ping"></span>
                 <h1 class="text-xl font-black tracking-wider text-slate-100">INFRA<span
-                        class="text-indigo-500">OPS</span> // COMMAND CENTER</h1>
+                        class="text-indigo-500">OPS</span> // WEBSOCKET STREAM</h1>
             </div>
             <div class="flex items-center space-x-3 text-sm text-slate-400">
                 <button @click="showAddModal = true"
@@ -57,7 +58,7 @@
                     <h2 class="font-bold text-lg"
                         x-text="allOperational ? 'Cluster Health: Optimal & Fully Operational' : 'Cluster Warning: Degraded Nodes Detected'">
                     </h2>
-                    <p class="text-xs text-slate-400">Automated SQLite telemetry & dynamic node tracking active.</p>
+                    <p class="text-xs text-slate-400">WebSocket persistent bi-directional stream active.</p>
                 </div>
             </div>
             <span class="text-xs px-3.5 py-1.5 bg-slate-900 rounded-xl border border-slate-800 font-mono"
@@ -96,18 +97,30 @@
                             </div>
                         </div>
 
-                        <!-- Chart Component for Local Node -->
+                        <!-- Multi-Metric Chart Component for Local Node -->
                         <div class="mt-4 p-3 bg-slate-950/50 rounded-xl border border-slate-800"
                             x-show="server.id === 'srv-local'">
                             <div class="flex justify-between items-center mb-2">
-                                <span class="text-xs text-slate-400 font-medium">CPU History Trend (SQLite
-                                    Persisted)</span>
+                                <div class="space-x-1">
+                                    <button @click="switchMetric('cpu')"
+                                        class="px-2 py-0.5 text-[10px] rounded font-mono transition"
+                                        :class="activeMetric === 'cpu' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400'">CPU
+                                        %</button>
+                                    <button @click="switchMetric('memory')"
+                                        class="px-2 py-0.5 text-[10px] rounded font-mono transition"
+                                        :class="activeMetric === 'memory' ? 'bg-sky-600 text-white' : 'bg-slate-800 text-slate-400'">Memory
+                                        %</button>
+                                    <button @click="switchMetric('latency')"
+                                        class="px-2 py-0.5 text-[10px] rounded font-mono transition"
+                                        :class="activeMetric === 'latency' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400'">Latency
+                                        (ms)</button>
+                                </div>
                                 <span
-                                    class="text-[10px] bg-indigo-950 text-indigo-300 px-2 py-0.5 rounded font-mono">Live
-                                    Stream</span>
+                                    class="text-[10px] bg-emerald-950 text-emerald-300 px-2 py-0.5 rounded font-mono animate-pulse">WS
+                                    Live</span>
                             </div>
                             <div style="height: 120px; position: relative; width: 100%;">
-                                <canvas id="cpuChart"></canvas>
+                                <canvas id="metricsChart"></canvas>
                             </div>
                         </div>
                     </div>
@@ -150,8 +163,7 @@
         class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
             <h3 class="text-lg font-bold text-slate-100">Register New Monitored Node</h3>
-            <p class="text-xs text-slate-400">Add an external server IP or domain name for live automated ping checks.
-            </p>
+            <p class="text-xs text-slate-400">Add an external server IP or domain name for live WebSocket tracking.</p>
             <div class="space-y-3">
                 <div>
                     <label class="text-xs text-slate-400 block mb-1">Node Name</label>
@@ -176,32 +188,51 @@
 
     <!-- Footer -->
     <footer class="bg-slate-900 border-t border-slate-800 py-4 px-6 text-center text-xs text-slate-500 font-mono">
-        <p>InfraOps Enterprise Engine &bull; Advanced Telemetry Command Center</p>
+        <p>InfraOps Enterprise Engine &bull; WebSocket Telemetry Stream</p>
     </footer>
 
     <!-- Script Logic -->
     <script>
         let chartInstance = null;
+        const socket = io('http://localhost:5000');
 
         function statusDashboard() {
             return {
                 servers: [],
                 totalServers: 0,
-                lastUpdated: 'Loading...',
+                lastUpdated: 'Connecting...',
                 allOperational: true,
                 incidents: [],
                 showAddModal: false,
                 newNodeName: '',
                 newNodeHost: '',
+                activeMetric: 'cpu',
+                latestHistory: [],
 
                 init() {
                     this.$nextTick(() => this.initChart());
-                    this.fetchStatus();
-                    setInterval(() => this.fetchStatus(), 5000);
+
+                    socket.on('connect', () => {
+                        socket.emit('request-telemetry');
+                    });
+
+                    socket.on('telemetry-update', (data) => {
+                        this.servers = data.servers;
+                        this.totalServers = data.totalServers;
+                        this.lastUpdated = new Date(data.timestamp).toLocaleTimeString();
+                        this.allOperational = this.servers.every(s => s.status === 'online');
+                        this.incidents = data.incidents || [];
+
+                        const localServer = this.servers.find(s => s.id === 'srv-local');
+                        if (localServer && localServer.history) {
+                            this.latestHistory = localServer.history;
+                            this.updateChartData();
+                        }
+                    });
                 },
 
                 initChart() {
-                    const ctx = document.getElementById('cpuChart');
+                    const ctx = document.getElementById('metricsChart');
                     if (ctx && !chartInstance) {
                         chartInstance = new Chart(ctx, {
                             type: 'line',
@@ -225,8 +256,6 @@
                                 scales: {
                                     x: { display: false },
                                     y: {
-                                        min: 0,
-                                        max: 100,
                                         grid: { color: 'rgba(255, 255, 255, 0.05)' },
                                         ticks: { color: '#64748b', font: { size: 9 } }
                                     }
@@ -236,26 +265,38 @@
                     }
                 },
 
-                fetchStatus() {
-                    fetch('http://localhost:5000/api/status')
-                        .then(res => res.json())
-                        .then(data => {
-                            this.servers = data.servers;
-                            this.totalServers = data.totalServers;
-                            this.lastUpdated = new Date(data.timestamp).toLocaleTimeString();
-                            this.allOperational = this.servers.every(s => s.status === 'online');
-                            this.incidents = data.incidents || [];
+                switchMetric(metricType) {
+                    this.activeMetric = metricType;
+                    if (chartInstance) {
+                        if (metricType === 'cpu') {
+                            chartInstance.data.datasets[0].label = 'CPU Usage %';
+                            chartInstance.data.datasets[0].borderColor = '#818cf8';
+                            chartInstance.data.datasets[0].backgroundColor = 'rgba(129, 140, 248, 0.1)';
+                        } else if (metricType === 'memory') {
+                            chartInstance.data.datasets[0].label = 'Memory Usage %';
+                            chartInstance.data.datasets[0].borderColor = '#38bdf8';
+                            chartInstance.data.datasets[0].backgroundColor = 'rgba(56, 189, 248, 0.1)';
+                        } else if (metricType === 'latency') {
+                            chartInstance.data.datasets[0].label = 'Latency (ms)';
+                            chartInstance.data.datasets[0].borderColor = '#34d399';
+                            chartInstance.data.datasets[0].backgroundColor = 'rgba(52, 211, 153, 0.1)';
+                        }
+                    }
+                    this.updateChartData();
+                },
 
-                            const localServer = this.servers.find(s => s.id === 'srv-local');
-                            if (!chartInstance) this.initChart();
+                updateChartData() {
+                    if (!chartInstance || !this.latestHistory.length) return;
+                    chartInstance.data.labels = this.latestHistory.map(h => new Date(h.timestamp).toLocaleTimeString());
 
-                            if (localServer && localServer.history && chartInstance) {
-                                chartInstance.data.labels = localServer.history.map(h => new Date(h.timestamp).toLocaleTimeString());
-                                chartInstance.data.datasets[0].data = localServer.history.map(h => h.cpu_usage);
-                                chartInstance.update();
-                            }
-                        })
-                        .catch(err => console.error('Fetch error:', err));
+                    if (this.activeMetric === 'cpu') {
+                        chartInstance.data.datasets[0].data = this.latestHistory.map(h => h.cpu_usage);
+                    } else if (this.activeMetric === 'memory') {
+                        chartInstance.data.datasets[0].data = this.latestHistory.map(h => h.memory_usage);
+                    } else if (this.activeMetric === 'latency') {
+                        chartInstance.data.datasets[0].data = this.latestHistory.map(h => h.latency);
+                    }
+                    chartInstance.update('none');
                 },
 
                 addNode() {
@@ -270,14 +311,14 @@
                             this.newNodeName = '';
                             this.newNodeHost = '';
                             this.showAddModal = false;
-                            this.fetchStatus();
+                            socket.emit('request-telemetry');
                         });
                 },
 
                 triggerAudit() {
                     fetch('http://localhost:5000/api/audit', { method: 'POST' })
                         .then(res => res.json())
-                        .then(() => this.fetchStatus());
+                        .then(() => socket.emit('request-telemetry'));
                 }
             }
         }
