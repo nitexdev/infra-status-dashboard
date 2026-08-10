@@ -4,131 +4,172 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cloud-Native Infrastructure Status</title>
-    <!-- Tailwind CSS for styling -->
+    <title>Enterprise Infrastructure Control Center</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Alpine.js for reactivity -->
+    <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Chart.js for real-time trend visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
-<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between font-sans"
-    x-data="statusDashboard()">
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between font-sans"
+    x-data="statusDashboard()" x-init="initCharts()">
 
     <!-- Header -->
-    <header class="bg-slate-800 border-b border-slate-700 py-4 px-6 shadow-md">
-        <div class="max-w-6xl mx-auto flex justify-between items-center">
+    <header class="bg-slate-900 border-b border-slate-800 py-4 px-6 shadow-xl sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
             <div class="flex items-center space-x-3">
-                <span class="inline-block w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></span>
-                <h1 class="text-xl font-bold tracking-wide">InfraOps // Global Status</h1>
+                <span class="inline-block w-3 h-3 bg-emerald-500 rounded-full animate-ping"></span>
+                <h1 class="text-xl font-black tracking-wider text-slate-100">INFRA<span
+                        class="text-indigo-500">OPS</span> // CONTROL CENTER</h1>
             </div>
-            <div class="text-sm text-slate-400">
-                Last Updated: <span x-text="lastUpdated" class="text-slate-200"></span>
+            <div class="flex items-center space-x-4 text-sm text-slate-400">
+                <span class="px-3 py-1 bg-slate-800 rounded-full border border-slate-700 font-mono text-xs">Environment:
+                    Production</span>
+                <span>Synced: <span x-text="lastUpdated" class="text-emerald-400 font-mono font-bold"></span></span>
             </div>
         </div>
     </header>
 
     <!-- Main Content -->
-    <main class="max-w-6xl mx-auto px-6 py-10 w-full flex-grow">
+    <main class="max-w-7xl mx-auto px-6 py-8 w-full flex-grow space-y-8">
 
         <!-- Status Banner -->
-        <div class="mb-8 p-4 rounded-xl border flex items-center justify-between"
-            :class="allOperational ? 'bg-emerald-950/40 border-emerald-800 text-emerald-300' : 'bg-amber-950/40 border-amber-800 text-amber-300'">
-            <div class="flex items-center space-x-3">
-                <svg x-show="allOperational" class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor"
-                    viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                </svg>
-                <svg x-show="!allOperational" class="w-6 h-6 text-amber-400" fill="none" stroke="currentColor"
-                    viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
-                    </path>
-                </svg>
-                <span class="font-semibold text-lg"
-                    x-text="allOperational ? 'All Systems Operational' : 'Degraded Performance Detected'"></span>
+        <div class="p-5 rounded-2xl border flex items-center justify-between shadow-lg backdrop-blur-md"
+            :class="allOperational ? 'bg-emerald-950/20 border-emerald-800/60 text-emerald-300' : 'bg-amber-950/20 border-amber-800/60 text-amber-300'">
+            <div class="flex items-center space-x-4">
+                <div class="p-2 rounded-xl bg-slate-900/80 border border-slate-700">
+                    <svg x-show="allOperational" class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    <svg x-show="!allOperational" class="w-6 h-6 text-amber-400" fill="none" stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                        </path>
+                    </svg>
+                </div>
+                <div>
+                    <h2 class="font-bold text-lg"
+                        x-text="allOperational ? 'Cluster Health: Optimal' : 'Cluster Warning: Degraded Nodes'"></h2>
+                    <p class="text-xs text-slate-400">Active automated health checks running via SQLite persistence
+                        engine.</p>
+                </div>
             </div>
-            <span class="text-sm px-3 py-1 bg-slate-800/80 rounded-lg border border-slate-700"
-                x-text="totalServers + ' Monitored Nodes'"></span>
+            <div class="flex space-x-3">
+                <span class="text-xs px-3.5 py-1.5 bg-slate-900 rounded-xl border border-slate-800 font-mono"
+                    x-text="totalServers + ' Nodes Monitored'"></span>
+            </div>
         </div>
 
         <!-- Server Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <template x-for="server in servers" :key="server.id">
                 <div
-                    class="bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-lg flex flex-col justify-between">
+                    class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col justify-between backdrop-blur-sm">
                     <div>
                         <div class="flex justify-between items-start mb-4">
                             <div>
-                                <h3 class="font-bold text-lg text-slate-100" x-text="server.name"></h3>
-                                <span class="text-xs text-slate-400 font-mono" x-text="server.id"></span>
+                                <h3 class="font-bold text-lg text-slate-100 flex items-center gap-2">
+                                    <span x-text="server.name"></span>
+                                </h3>
+                                <span class="text-xs text-slate-500 font-mono" x-text="'ID: ' + server.id"></span>
                             </div>
-                            <span class="px-2.5 py-1 rounded-full text-xs font-medium uppercase tracking-wider"
-                                :class="server.status === 'online' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'"
+                            <span
+                                class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider font-mono shadow-inner"
+                                :class="server.status === 'online' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'"
                                 x-text="server.status">
                             </span>
                         </div>
 
-                        <!-- Metrics -->
-                        <div class="space-y-3 mt-6">
-                            <div>
-                                <div class="flex justify-between text-sm mb-1">
-                                    <span class="text-slate-400">CPU Usage</span>
-                                    <span class="font-mono font-medium" x-text="server.cpuUsage"></span>
-                                </div>
-                                <div class="w-full bg-slate-700 h-2 rounded-full overflow-hidden">
-                                    <div class="bg-indigo-500 h-full rounded-full transition-all duration-500"
-                                        :style="'width: ' + server.cpuUsage"></div>
-                                </div>
+                        <!-- Current Telemetry Gauges -->
+                        <div class="grid grid-cols-2 gap-4 my-6">
+                            <div class="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
+                                <span class="text-xs text-slate-400 block mb-1">CPU Load</span>
+                                <span class="text-xl font-mono font-bold text-indigo-400"
+                                    x-text="server.cpuUsage"></span>
                             </div>
+                            <div class="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
+                                <span class="text-xs text-slate-400 block mb-1">Memory Usage</span>
+                                <span class="text-xl font-mono font-bold text-sky-400"
+                                    x-text="server.memoryUsage"></span>
+                            </div>
+                        </div>
 
-                            <div>
-                                <div class="flex justify-between text-sm mb-1">
-                                    <span class="text-slate-400">Memory Usage</span>
-                                    <span class="font-mono font-medium" x-text="server.memoryUsage"></span>
-                                </div>
-                                <div class="w-full bg-slate-700 h-2 rounded-full overflow-hidden">
-                                    <div class="bg-sky-500 h-full rounded-full transition-all duration-500"
-                                        :style="'width: ' + server.memoryUsage"></div>
-                                </div>
+                        <!-- Sparkline Chart Container for Local Node -->
+                        <div class="mt-4 p-3 bg-slate-950/40 rounded-xl border border-slate-800/50"
+                            x-show="server.id === 'srv-local'">
+                            <div class="text-xs text-slate-400 mb-2 font-medium">Live CPU History Trend (SQLite Logged)
+                            </div>
+                            <div class="h-28 relative">
+                                <canvas :id="'chart-' + server.id"></canvas>
                             </div>
                         </div>
                     </div>
 
                     <!-- Footer Info -->
-                    <div class="mt-6 pt-4 border-t border-slate-700/60 flex justify-between text-xs text-slate-400">
-                        <div>Uptime: <span class="text-slate-200 font-medium" x-text="server.uptime"></span></div>
-                        <div>Latency: <span class="text-slate-200 font-medium" x-text="server.latency"></span></div>
+                    <div
+                        class="mt-6 pt-4 border-t border-slate-800 flex justify-between text-xs text-slate-400 font-mono">
+                        <div>Uptime: <span class="text-slate-200 font-bold" x-text="server.uptime"></span></div>
+                        <div>Latency: <span class="text-slate-200 font-bold" x-text="server.latency"></span></div>
                     </div>
                 </div>
             </template>
         </div>
 
+        <!-- Incident Activity Log Section -->
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl">
+            <h3 class="font-bold text-md text-slate-200 mb-4 flex items-center gap-2">
+                <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10">
+                    </path>
+                </svg>
+                System Event & Incident Stream
+            </h3>
+            <div class="space-y-2 font-mono text-xs">
+                <template x-for="incident in incidents">
+                    <div
+                        class="p-3 bg-slate-950/60 rounded-xl border border-slate-800 flex justify-between items-center">
+                        <span class="text-slate-300" x-text="incident.message"></span>
+                        <span class="text-slate-500" x-text="new Date(incident.timestamp).toLocaleTimeString()"></span>
+                    </div>
+                </template>
+                <div x-show="incidents.length === 0" class="p-4 text-slate-500 text-center italic">
+                    No active warnings or anomalies recorded. Cluster running smoothly.
+                </div>
+            </div>
+        </div>
+
     </main>
 
     <!-- Footer -->
-    <footer class="bg-slate-800 border-t border-slate-700 py-4 px-6 text-center text-sm text-slate-400">
-        <p>InfraOps Status Engine &bull; Built for Portfolio Demonstration</p>
+    <footer class="bg-slate-900 border-t border-slate-800 py-4 px-6 text-center text-xs text-slate-500 font-mono">
+        <p>InfraOps Enterprise Engine &bull; Persistent SQLite Metrics &bull; Portfolio Grade</p>
     </footer>
 
-    <!-- Frontend Script Logic -->
+    <!-- Frontend Alpine & Chart Logic -->
     <script>
+        let cpuChartInstance = null;
+
         function statusDashboard() {
             return {
                 servers: [],
                 totalServers: 0,
                 lastUpdated: 'Loading...',
                 allOperational: true,
+                incidents: [],
 
                 init() {
                     this.fetchStatus();
-                    // Poll the backend every 5 seconds for live updates
                     setInterval(() => {
                         this.fetchStatus();
                     }, 5000);
                 },
 
                 fetchStatus() {
-                    // Points to your local backend server
                     fetch('http://localhost:5000/api/status')
                         .then(res => res.json())
                         .then(data => {
@@ -136,11 +177,54 @@
                             this.totalServers = data.totalServers;
                             this.lastUpdated = new Date(data.timestamp).toLocaleTimeString();
                             this.allOperational = this.servers.every(s => s.status === 'online');
+                            this.incidents = data.incidents || [];
+
+                            // Update chart data dynamically
+                            const localServer = this.servers.find(s => s.id === 'srv-local');
+                            if (localServer && localServer.history && cpuChartInstance) {
+                                cpuChartInstance.data.labels = localServer.history.map(h => new Date(h.timestamp).toLocaleTimeString());
+                                cpuChartInstance.data.datasets[0].data = localServer.history.map(h => h.cpu_usage);
+                                cpuChartInstance.update('none');
+                            }
                         })
-                        .catch(err => {
-                            console.error('Failed to fetch infrastructure metrics:', err);
-                        });
+                        .catch(err => console.error('Error fetching dashboard telemetry:', err));
                 }
+            }
+        }
+
+        function initCharts() {
+            const ctx = document.getElementById('chart-srv-local');
+            if (ctx) {
+                cpuChartInstance = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'CPU %',
+                            data: [],
+                            borderColor: '#6366f1',
+                            backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { display: false },
+                            y: {
+                                min: 0,
+                                max: 100,
+                                grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                                ticks: { color: '#64748b', font: { size: 10 } }
+                            }
+                        }
+                    }
+                });
             }
         }
     </script>
